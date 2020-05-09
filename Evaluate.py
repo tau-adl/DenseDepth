@@ -20,8 +20,11 @@ def main():
     parser = argparse.ArgumentParser(description='High Quality Monocular Depth Estimation via Transfer Learning')
     parser.add_argument('--path', default="TrainedModel/EntireModel/model_batch_2_epochs_20.pt", type=str, help='model path')
     parser.add_argument('--bs', default=1, type=int, help='batch size')
+    parser.add_argument('--epochs', default=20, type=int, help='number of epochs')
     args = parser.parse_args()
 
+    if args.epochs != 20:
+        args.path = "TrainedModel/EntireModel/model_batch_2_epochs_{:}.pt".format(args.epochs)
 
     # Load data
     train_loader, test_loader = getTrainingTestingData(batch_size=args.bs)

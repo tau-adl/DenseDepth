@@ -1,6 +1,7 @@
 import pandas as pd
 import numpy as np
 import torch
+import os
 from torch.utils.data import Dataset, DataLoader
 from torchvision import transforms, utils
 from PIL import Image
@@ -82,9 +83,10 @@ def loadZipToMem(zip_file):
     # nyu2_test = list((row.split(',') for row in (data['data/nyu2_test.csv']).decode("utf-8").split('\n') if len(row) > 0))
     nyu2_test = nyu2_train[0:500]
     nyu2_train = nyu2_train[500:]
-
-    exportSplittingToCSV("Data/test_split", nyu2_test, "test")
-    exportSplittingToCSV("Data/train_split", nyu2_test, "train")
+    if not os.path.exists("Data/test_split.csv"):
+        exportSplittingToCSV("Data/test_split", nyu2_test, "test")
+    if not os.path.exists("Data/train_split.csv"):
+        exportSplittingToCSV("Data/train_split", nyu2_test, "train")
 
     nyu2_train = shuffle(nyu2_train, random_state=0)
 
