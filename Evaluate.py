@@ -1,55 +1,128 @@
-import time
 import argparse
-import datetime
+import csv
 import os
-
+import time
+import numpy as np
 import torch
-import torch.nn as nn
-import torch.nn.utils as utils
-import torchvision.utils as vutils
-from tensorboardX import SummaryWriter
+import utils
 
-from Model import FullModel
-from Loss import ssim
-from Data import getTrainingTestingData
-from Utilities import AverageMeter, DepthNorm, colorize, saveImages
+from metrics import AverageMeter, Result
+
+from nyu import NYUDataset
+
+
+def validate(val_loader, model, epoch, output_directory=""):
+    average_meter = AverageMeter()
+    model.eval()  # switch to evaluate mode
+    end = time.time()
+
+    eval_file = output_directory + '/evaluation.txt'
+    f = open(eval_file, "w+")
+    f.write("Max_Error  Depth   \r\n")
+    for i, (input, target) in enumerate(val_loader):
+        input, target = input.cuda(), target.cuda()
+        # torch.cuda.synchronize()
+        data_time = time.time() - end
+
+        # compute output
+        end = time.time()
+        with torch.no_grad():
+            pred = model(input)
+        # normalization for the model
+        input = input[:, :, ::2, ::2]
+        target = target[:, :, ::2, ::2]
+
+        abs_err = (target.data - pred.data).abs().cpu()
+        max_err_ind = np.unravel_index(np.argmax(abs_err, axis=None), abs_err.shape)
+
+        max_err_depth = target.data[max_err_ind]
+        max_err = abs_err[max_err_ind]
+        f.write(f'{max_err}  {max_err_depth}   \r\n')
+
+        # torch.cuda.synchronize()
+        gpu_time = time.time() - end
+
+        # measure accuracy and record loss
+        result = Result()
+        result.evaluate(pred.data, target.data)
+        average_meter.update(result, gpu_time, data_time, input.size(0))
+        end = time.time()
+
+        # save 8 images for visualization
+        skip = 50
+        output_directory = os.path.abspath(os.path.dirname(__file__))
+
+        if i == 0:
+            print(f'{input.shape} {target.shape} {pred.shape}')
+            img_merge = utils.merge_into_row_with_gt(input, target, pred, (target-pred).abs())
+        elif (i < 8 * skip) and (i % skip == 0):
+            row = utils.merge_into_row_with_gt(input, target, pred, (target-pred).abs())
+            img_merge = utils.add_row(img_merge, row)
+        elif i == 8 * skip:
+            filename = output_directory + '/comparison_' + str(epoch) + '.png'
+            utils.save_image(img_merge, filename)
+
+        if (i + 1) % skip == 0:
+            print('Test: [{0}/{1}]\t'
+                  't_GPU={gpu_time:.3f}({average.gpu_time:.3f})\n\t'
+                  'RMSE={result.rmse:.2f}({average.rmse:.2f}) '
+                  'MAE={result.mae:.2f}({average.mae:.2f}) '
+                  'Delta1={result.delta1:.3f}({average.delta1:.3f}) '
+                  'REL={result.absrel:.3f}({average.absrel:.3f}) '
+                  'Lg10={result.lg10:.3f}({average.lg10:.3f}) '.format(
+                i + 1, len(val_loader), gpu_time=gpu_time, result=result, average=average_meter.average()))
+    f.close()
+    avg = average_meter.average()
+
+    print('\n*\n'
+          'RMSE={average.rmse:.3f}\n'
+          'MAE={average.mae:.3f}\n'
+          'Delta1={average.delta1:.3f}\n'
+          'REL={average.absrel:.3f}\n'
+          'Lg10={average.lg10:.3f}\n'
+          't_GPU={time:.3f}\n'.format(
+        average=avg, time=avg.gpu_time))
+    return avg, img_merge
 
 
 def main():
     # Arguments
     parser = argparse.ArgumentParser(description='High Quality Monocular Depth Estimation via Transfer Learning')
-    parser.add_argument('--path', default="TrainedModel/EntireModel/model_batch_2_epochs_20.pt", type=str, help='model path')
+    parser.add_argument('--path', default="TrainedModel/EntireModel/model_batch_2_epochs_20.pt", type=str,
+                        help='model path')
     parser.add_argument('--bs', default=1, type=int, help='batch size')
-    parser.add_argument('--epochs', default=20, type=int, help='number of epochs')
+    parser.add_argument('--data', metavar='DATA', default='nyudepthv2',
+                        help='dataset:')
+    parser.add_argument('--modality', '-m', metavar='MODALITY', default='rgb',
+                        help='modality: ')
+    parser.add_argument('-j', '--workers', default=16, type=int, metavar='N',
+                        help='number of data loading workers (default: 16)')
     args = parser.parse_args()
 
-    if args.epochs != 20:
-        args.path = "TrainedModel/EntireModel/model_batch_2_epochs_{:}.pt".format(args.epochs)
+    # Data loading code
+    print("=> creating data loaders...")
+    valdir = os.path.join('..', 'data', args.data, 'val')
 
-    # Load data
-    train_loader, test_loader = getTrainingTestingData(batch_size=args.bs)
+    val_dataset = NYUDataset(valdir, split='val', modality=args.modality)
 
-    model = torch.load(args.path)
-    l1_criterion = nn.L1Loss()
+    # set batch size to be 1 for validation
+    val_loader = torch.utils.data.DataLoader(val_dataset,
+                                             batch_size=1, shuffle=False, num_workers=args.workers, pin_memory=True)
+    print("=> data loaders created.")
 
-    for i, sample_batched in enumerate(test_loader):
-        torch.cuda.empty_cache()
-        # Prepare sample and target
-        image = torch.autograd.Variable(sample_batched['image'].cuda())
-        depth = torch.autograd.Variable(sample_batched['depth'].cuda(non_blocking=True))
-        # Normalize depth
-        depth_n = DepthNorm(depth)
-
-        output = model(image)
-
-        # Compute the loss
-        l_depth = l1_criterion(output, depth_n)
-        l_ssim = torch.clamp((1 - ssim(output, depth_n, val_range = 1000.0 / 10.0)) * 0.5, 0, 1)
-        loss = (1.0 * l_ssim) + (0.1 * l_depth)
-        if i % 100 == 0:
-            print("saving image..")
-            print("loss depth = {:}, loss ssim = {:}, total loss = {:}".format(l_depth, l_ssim, loss))
-            saveImages("{:}.png".format(i), output, image, depth_n)
+    assert os.path.isfile(args.path), "=> no model found at '{}'".format(args.path)
+    print("=> loading model '{}'".format(args.path))
+    checkpoint = torch.load(args.path)
+    if type(checkpoint) is dict:
+        args.start_epoch = checkpoint['epoch']
+        best_result = checkpoint['best_result']
+        model = checkpoint['model']
+        print("=> loaded best model (epoch {})".format(checkpoint['epoch']))
+    else:
+        model = checkpoint
+        args.start_epoch = 0
+    output_directory = os.path.dirname(__file__)
+    validate(val_loader, model, args.start_epoch, output_directory)
     return
 
 
