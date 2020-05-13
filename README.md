@@ -29,9 +29,15 @@ pip install -r pip_requirements.txt
 
 *In order to utilize the GPU implementation make sure your hardware and operation system are compatible for Pytorch with python 3*
 
-### Data Collection
+### NYU database
+Download the preprocessed NYU Depth V2 dataset in HDF5 format and place it under a data folder outside the repo directory. The NYU dataset requires 32G of storage space.
+```
+mkdir data; cd data
 
-Run the shell script ```DataCollect.sh```
+wget http://datasets.lids.mit.edu/fastdepth/data/nyudepthv2.tar.gz
+
+tar -xvf nyudepthv2.tar.gz && rm -f nyudepthv2.tar.gz
+```
 
 ## Training the model
 
@@ -48,5 +54,19 @@ python3 Evaluate.py
 ```
 
 ## Authors
-
+* **Sunny Yehuda** - *sunnyyehuda@gmail.com*
 * **David Sriker** - *David.Sriker@gmail.com*
+
+## Reference
+```
+@article{Alhashim2018,
+  author    = {Ibraheem Alhashim and Peter Wonka},
+  title     = {High Quality Monocular Depth Estimation via Transfer Learning},
+  journal   = {arXiv e-prints},
+  volume    = {abs/1812.11941},
+  year      = {2018},
+  url       = {https://arxiv.org/abs/1812.11941},
+  eid       = {arXiv:1812.11941},
+  eprint    = {1812.11941}
+}
+```
