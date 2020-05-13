@@ -43,14 +43,14 @@ tar -xvf nyudepthv2.tar.gz && rm -f nyudepthv2.tar.gz
 
 Execute training by running:  
 ```
-python3 Train.py
+python3 Train.py --epochs 10 --lr 0.01
 ```
 
 ## Testing the model
 
 Execute testing by running:  
 ```
-python3 Evaluate.py
+python3 Evaluate.py --path TrainedModel/EntireModel/model_batch_10_epochs_1.pt 
 ```
 
 ## Authors
