@@ -53,8 +53,23 @@ Execute testing by running:
 python3 Evaluate.py --path TrainedModel/EntireModel/model_batch_10_epochs_1.pt 
 ```
 
-## Authors
-* **David Sriker** - *David.Sriker@gmail.com*
-* **Sunny Yehuda** - *sunnyyehuda@gmail.com*
+## Authors (contributed equally*)
+* **David Sriker*** - *David.Sriker@gmail.com*
+* **Sunny Yehuda*** - *sunnyyehuda@gmail.com*
+
+
+ ## Reference
+ ```
+ @article{Alhashim2018,
+  author    = {Ibraheem Alhashim and Peter Wonka},
+  title     = {High Quality Monocular Depth Estimation via Transfer Learning},
+  journal   = {arXiv e-prints},
+  volume    = {abs/1812.11941},
+  year      = {2018},
+  url       = {https://arxiv.org/abs/1812.11941},
+  eid       = {arXiv:1812.11941},
+  eprint    = {1812.11941}
+}
+```
 
 
