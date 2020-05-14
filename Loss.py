@@ -1,16 +1,21 @@
-import torch
 from math import exp
+
+import torch
+import torch.nn as nn
 import torch.nn.functional as F
 
+
 def gaussian(window_size, sigma):
-    gauss = torch.Tensor([exp(-(x - window_size//2)**2/float(2*sigma**2)) for x in range(window_size)])
-    return gauss/gauss.sum()
+    gauss = torch.Tensor([exp(-(x - window_size // 2) ** 2 / float(2 * sigma ** 2)) for x in range(window_size)])
+    return gauss / gauss.sum()
+
 
 def create_window(window_size, channel=1):
     _1D_window = gaussian(window_size, 1.5).unsqueeze(1)
     _2D_window = _1D_window.mm(_1D_window.t()).float().unsqueeze(0).unsqueeze(0)
     window = _2D_window.expand(channel, 1, window_size, window_size).contiguous()
     return window
+
 
 def ssim(img1, img2, val_range, window_size=11, window=None, size_average=True, full=False):
     L = val_range
@@ -50,3 +55,29 @@ def ssim(img1, img2, val_range, window_size=11, window=None, size_average=True, 
         return ret, cs
 
     return ret
+
+
+class MaskedMSELoss(nn.Module):
+    def __init__(self):
+        super(MaskedMSELoss, self).__init__()
+
+    def forward(self, pred, target):
+        assert pred.dim() == target.dim(), "inconsistent dimensions"
+        valid_mask = (target > 0).detach()
+        diff = target - pred
+        diff = diff[valid_mask]
+        self.loss = (diff ** 2).mean()
+        return self.loss
+
+
+class MaskedL1Loss(nn.Module):
+    def __init__(self):
+        super(MaskedL1Loss, self).__init__()
+
+    def forward(self, pred, target):
+        assert pred.dim() == target.dim(), "inconsistent dimensions"
+        valid_mask = (target > 0).detach()
+        diff = target - pred
+        diff = diff[valid_mask]
+        self.loss = diff.abs().mean()
+        return self.loss

@@ -1,188 +1,201 @@
-import pandas as pd
+import os
+import os.path
+
+import h5py
 import numpy as np
 import torch
-import os
-from torch.utils.data import Dataset, DataLoader
-from torchvision import transforms, utils
-from PIL import Image
-from io import BytesIO
-import random
-from sklearn.utils import shuffle
-from zipfile import ZipFile
-import pandas as pd
+import torch.utils.data as data
 
-def _is_pil_image(img):
-    return isinstance(img, Image.Image)
+import Transforms as T
 
-def _is_numpy_image(img):
-    return isinstance(img, np.ndarray) and (img.ndim in {2, 3})
+IMAGE_HEIGHT, IMAGE_WIDTH = 480, 640  # raw image size
 
-class RandomHorizontalFlip(object):
-    def __call__(self, sample):
-        image, depth = sample['image'], sample['depth']
 
-        if not _is_pil_image(image):
-            raise TypeError(
-                'img should be PIL Image. Got {}'.format(type(image)))
-        if not _is_pil_image(depth):
-            raise TypeError(
-                'img should be PIL Image. Got {}'.format(type(depth)))
+def h5Loader(path):
+    h5f = h5py.File(path, "r")
+    rgb = np.array(h5f['rgb'])
+    rgb = np.transpose(rgb, (1, 2, 0))
+    depth = np.array(h5f['depth'])
+    return rgb, depth
 
-        if random.random() < 0.5:
-            image = image.transpose(Image.FLIP_LEFT_RIGHT)
-            depth = depth.transpose(Image.FLIP_LEFT_RIGHT)
 
-        return {'image': image, 'depth': depth}
+class CustomDataLoader(data.Dataset):
+    modality_names = ['rgb']
 
-class RandomVerticalFlip(object):
-    def __call__(self, sample):
-        image, depth = sample['image'], sample['depth']
+    # def isImageFile(self, filename):
+    #     IMG_EXTENSIONS = ['.h5']
+    #     return any(filename.endswith(extension) for extension in IMG_EXTENSIONS)
 
-        if not _is_pil_image(image):
-            raise TypeError(
-                'img should be PIL Image. Got {}'.format(type(image)))
-        if not _is_pil_image(depth):
-            raise TypeError(
-                'img should be PIL Image. Got {}'.format(type(depth)))
+    def findClasses(self, dir):
+        classes = [d for d in os.listdir(dir) if os.path.isdir(os.path.join(dir, d))]
+        classes.sort()
+        class_to_idx = {classes[i]: i for i in range(len(classes))}
+        return classes, class_to_idx
 
-        if random.random() < 0.5:
-            image = image.transpose(Image.FLIP_TOP_BOTTOM)
-            depth = depth.transpose(Image.FLIP_TOP_BOTTOM)
+    def makeDataset(self, dir, class_to_idx):
+        images = []
+        dir = os.path.expanduser(dir)
+        for target in sorted(os.listdir(dir)):
+            d = os.path.join(dir, target)
+            if not os.path.isdir(d):
+                continue
+            for root, _, fnames in sorted(os.walk(d)):
+                for fname in sorted(fnames):
+                    if self.isImageFile(fname):
+                        path = os.path.join(root, fname)
+                        item = (path, class_to_idx[target])
+                        images.append(item)
+        return images
 
-        return {'image': image, 'depth': depth}
+    color_jitter = T.ColorJitter(0.4, 0.4, 0.4)
 
-class RandomChannelSwap(object):
-    def __init__(self, probability):
-        from itertools import permutations
-        self.probability = probability
-        self.indices = list(permutations(range(3), 3))
+    def __init__(self, root, split, modality='rgb', loader=h5Loader):
+        classes, class_to_idx = self.findClasses(root)
+        imgs = self.makeDataset(root, class_to_idx)
+        assert len(imgs) > 0, "Found 0 images in subfolders of: " + root + "\n"
+        # print("Found {} images in {} folder.".format(len(imgs), split))
+        self.root = root
+        self.imgs = imgs
+        self.classes = classes
+        self.class_to_idx = class_to_idx
+        if split == 'train':
+            self.transform = self.trainTransform
+        elif split == 'holdout':
+            self.transform = self.validationTransform
+        elif split == 'val':
+            self.transform = self.validationTransform
+        else:
+            raise (RuntimeError("Invalid dataset split: " + split + "\n"
+                                                                    "Supported dataset splits are: train, val"))
+        self.loader = loader
 
-    def __call__(self, sample):
-        image, depth = sample['image'], sample['depth']
-        if not _is_pil_image(image): raise TypeError('img should be PIL Image. Got {}'.format(type(image)))
-        if not _is_pil_image(depth): raise TypeError('img should be PIL Image. Got {}'.format(type(depth)))
-        if random.random() < self.probability:
-            image = np.asarray(image)
-            image = Image.fromarray(image[...,list(self.indices[random.randint(0, len(self.indices) - 1)])])
-        return {'image': image, 'depth': depth}
+        assert (modality in self.modality_names), "Invalid modality split: " + modality + "\n" + \
+                                                  "Supported dataset splits are: " + ''.join(self.modality_names)
+        self.modality = modality
 
-def exportSplittingToCSV(path, split, name):
-    df = pd.DataFrame(split, columns=["image", "depth"])
-    df.to_csv("{:}.csv".format(path))
-    print(10 * "#")
-    print("Exported the {:} split to {:}.csv".format(name, path))
-    print(10 * "#")
-    return
+    # def trainTransform(self, rgb, depth):
+    #     raise (RuntimeError("train_transform() is not implemented. "))
+    #
+    # def validationTransform(rgb, depth):
+    #     raise (RuntimeError("val_transform() is not implemented."))
 
-def loadZipToMem(zip_file):
-    # Load zip file into memory
-    print('Loading dataset zip file...', end='')
-    input_zip = ZipFile(zip_file)
-    data = {name: input_zip.read(name) for name in input_zip.namelist()}
-    nyu2_train = list((row.split(',') for row in (data['data/nyu2_train.csv']).decode("utf-8").split('\n') if len(row) > 0))
-    # nyu2_test = list((row.split(',') for row in (data['data/nyu2_test.csv']).decode("utf-8").split('\n') if len(row) > 0))
-    nyu2_test = nyu2_train[0:500]
-    nyu2_train = nyu2_train[500:]
-    if not os.path.exists("Data/test_split.csv"):
-        exportSplittingToCSV("Data/test_split", nyu2_test, "test")
-    if not os.path.exists("Data/train_split.csv"):
-        exportSplittingToCSV("Data/train_split", nyu2_test, "train")
+    def __getraw__(self, index):
+        """
+        Args:
+            index (int): Index
 
-    nyu2_train = shuffle(nyu2_train, random_state=0)
+        Returns:
+            tuple: (rgb, depth) the raw data.
+        """
+        path, target = self.imgs[index]
+        rgb, depth = self.loader(path)
+        return rgb, depth
 
-    #if True: nyu2_train = nyu2_train[:40]
+    def __getitem__(self, index):
+        rgb, depth = self.__getraw__(index)
+        if self.transform is not None:
+            rgb_np, depth_np = self.transform(rgb, depth)
+        else:
+            raise (RuntimeError("transform not defined"))
 
-    print('Training Loaded ({0}).'.format(len(nyu2_train)))
-    print('Testing Loaded ({0}).'.format(len(nyu2_test)))
-    return data, nyu2_train, nyu2_test
+        # color normalization
+        # rgb_tensor = normalize_rgb(rgb_tensor)
+        # rgb_np = normalize_np(rgb_np)
 
-class depthDatasetMemory(Dataset):
-    def __init__(self, data, nyu2_train, transform=None):
-        self.data, self.nyu_dataset = data, nyu2_train
-        self.transform = transform
+        if self.modality == 'rgb':
+            input_np = rgb_np
 
-    def __getitem__(self, idx):
-        sample = self.nyu_dataset[idx]
-        image = Image.open(BytesIO(self.data[sample[0]]))
-        depth = Image.open(BytesIO(self.data[sample[1]]))
-        sample = {'image': image, 'depth': depth}
-        if self.transform: sample = self.transform(sample)
-        return sample
+        to_tensor = T.ToTensor()
+        input_tensor = to_tensor(input_np)
+        while input_tensor.dim() < 3:
+            input_tensor = input_tensor.unsqueeze(0)
+        depth_tensor = to_tensor(depth_np)
+        depth_tensor = depth_tensor.unsqueeze(0)
+
+        return input_tensor, depth_tensor
 
     def __len__(self):
-        return len(self.nyu_dataset)
+        return len(self.imgs)
 
-class ToTensor(object):
-    def __init__(self, is_test=False):
-        self.is_test = is_test
 
-    def __call__(self, sample):
-        image, depth = sample['image'], sample['depth']
+class NYU(CustomDataLoader):
+    def __init__(self, root, split, modality='rgb'):
+        self.split = split
+        super(NYU, self).__init__(root, split, modality)
+        self.output_size = (224, 224)
 
-        image = self.to_tensor(image)
-
-        depth = depth.resize((320, 240))
-
-        if self.is_test:
-            depth = self.to_tensor(depth).float() / 1000
+    def isImageFile(self, filename):
+        # IMG_EXTENSIONS = ['.h5']
+        if self.split == 'train':
+            return filename.endswith('.h5') and '00001.h5' not in filename and '00201.h5' not in filename
+        elif self.split == 'holdout':
+            return '00001.h5' in filename or '00201.h5' in filename
+        elif self.split == 'val':
+            return filename.endswith('.h5')
         else:
-            depth = self.to_tensor(depth).float() * 1000
+            raise RuntimeError("Invalid dataset split: " + self.split + "\nSupported dataset splits are: train, val")
 
-        # put in expected range
-        depth = torch.clamp(depth, 10, 1000)
+    def trainTransform(self, rgb, depth):
+        s = np.random.uniform(1.0, 1.5)  # random scaling
+        depth_np = depth / s
+        angle = np.random.uniform(-5.0, 5.0)  # random rotation degrees
+        do_flip = np.random.uniform(0.0, 1.0) < 0.5  # random horizontal flip
 
-        return {'image': image, 'depth': depth}
+        # perform 1st step of data augmentation
+        transform = T.Compose([
+            T.Resize(250.0 / IMAGE_HEIGHT),  # this is for computational efficiency, since rotation can be slow
+            T.Rotate(angle),
+            T.Resize(s),
+            T.CenterCrop((228, 304)),
+            T.HorizontalFlip(do_flip),
+            T.Resize(self.output_size),
+        ])
+        rgb_np = transform(rgb)
+        rgb_np = self.color_jitter(rgb_np)  # random color jittering
+        rgb_np = np.asfarray(rgb_np, dtype='float') / 255
+        depth_np = transform(depth_np)
 
-    def to_tensor(self, pic):
-        if not(_is_pil_image(pic) or _is_numpy_image(pic)):
-            raise TypeError(
-                'pic should be PIL Image or ndarray. Got {}'.format(type(pic)))
+        return rgb_np, depth_np
 
-        if isinstance(pic, np.ndarray):
-            img = torch.from_numpy(pic.transpose((2, 0, 1)))
+    def validationTransform(self, rgb, depth):
+        depth_np = depth
+        transform = T.Compose([
+            T.Resize(250.0 / IMAGE_HEIGHT),
+            T.CenterCrop((228, 304)),
+            T.Resize(self.output_size),
+        ])
+        rgb_np = transform(rgb)
+        rgb_np = np.asfarray(rgb_np, dtype='float') / 255
+        depth_np = transform(depth_np)
 
-            return img.float().div(255)
+        return rgb_np, depth_np
 
-        # handle PIL Image
-        if pic.mode == 'I':
-            img = torch.from_numpy(np.array(pic, np.int32, copy=False))
-        elif pic.mode == 'I;16':
-            img = torch.from_numpy(np.array(pic, np.int16, copy=False))
-        else:
-            img = torch.ByteTensor(
-                torch.ByteStorage.from_buffer(pic.tobytes()))
-        # PIL image mode: 1, L, P, I, F, RGB, YCbCr, RGBA, CMYK
-        if pic.mode == 'YCbCr':
-            nchannel = 3
-        elif pic.mode == 'I;16':
-            nchannel = 1
-        else:
-            nchannel = len(pic.mode)
-        img = img.view(pic.size[1], pic.size[0], nchannel)
 
-        img = img.transpose(0, 1).transpose(0, 2).contiguous()
-        if isinstance(img, torch.ByteTensor):
-            return img.float().div(255)
-        else:
-            return img
+def createDataLoaders(args):
+    # Data loading code
+    print("=> creating data loaders ...")
+    parent_path = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+    train_dir = os.path.join(parent_path, 'data', args.data, 'train')
+    validation_dir = os.path.join(parent_path, 'data', args.data, 'val')
 
-def getNoTransform(is_test=False):
-    return transforms.Compose([
-        ToTensor(is_test=is_test)
-    ])
+    train_loader = None
 
-def getDefaultTrainTransform():
-    return transforms.Compose([
-        RandomHorizontalFlip(),
-        RandomVerticalFlip(),
-        RandomChannelSwap(0.5),
-        ToTensor()
-    ])
+    if args.data == 'nyudepthv2':
+        train_dataset = NYU(train_dir, split='train', modality=args.modality)
+        val_dataset = NYU(validation_dir, split='val', modality=args.modality)
+    else:
+        raise RuntimeError('Dataset not found.' + 'The dataset must be nyudepthv2.')
 
-def getTrainingTestingData(batch_size):
-    data, nyu2_train, nyu2_test = loadZipToMem('Data/nyu_data.zip')
+    # set batch size to be 1 for validation
+    val_loader = torch.utils.data.DataLoader(val_dataset, batch_size=1, shuffle=False, num_workers=args.workers,
+                                             pin_memory=True)
 
-    transformed_training = depthDatasetMemory(data, nyu2_train, transform=getDefaultTrainTransform())
-    transformed_testing = depthDatasetMemory(data, nyu2_test, transform=getNoTransform())
+    # put construction of train loader here, for those who are interested in testing only
+    train_loader = torch.utils.data.DataLoader(
+        train_dataset, batch_size=args.batch_size, shuffle=True,
+        num_workers=args.workers, pin_memory=True, sampler=None,
+        worker_init_fn=lambda work_id: np.random.seed(work_id))
+    # worker_init_fn ensures different sampling patterns for each data loading thread
 
-    return DataLoader(transformed_training, batch_size, shuffle=True), DataLoader(transformed_testing, batch_size, shuffle=False)
+    print("=> data loaders created.")
+    return train_loader, val_loader
