@@ -18,7 +18,7 @@ def main():
     parser.add_argument('--epochs', default=30, type=int, help='number of total epochs to run')
     parser.add_argument('--lr', '--learning-rate', default=0.0001, type=float, help='initial learning rate')
     parser.add_argument('--batch_size', default=1, type=int, help='batch size')
-    parser.add_argument('--path', default='../data/nyudepthv2', help='path')
+    parser.add_argument('--path', default='../Data/nyudepthv2', help='path')
     parser.add_argument('--data', default='nyudepthv2', help='model')
     parser.add_argument('--modality', '-m', metavar='MODALITY', default='rgb', choices=modality_names,
                         help='modality: ' + ' | '.join(modality_names) + ' (default: rgb)')
