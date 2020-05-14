@@ -53,9 +53,9 @@ Execute testing by running:
 python3 Evaluate.py --path TrainedModel/EntireModel/model_batch_10_epochs_1.pt 
 ```
 
-## Authors
-* **Sunny Yehuda** - *sunnyyehuda@gmail.com*
-* **David Sriker** - *David.Sriker@gmail.com*
+## Authors (Equally contributed)
+* **Sunny Yehuda*** - *sunnyyehuda@gmail.com*
+* **David Sriker*** - *David.Sriker@gmail.com*
 
 ## Reference
 ```
