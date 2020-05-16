@@ -37,7 +37,6 @@ def validate(val_loader, model, epoch, output_directory=""):
 
         max_err_depth = target.data[max_err_ind]
         max_err = abs_err[max_err_ind]
-        f.write(f'{max_err}  {max_err_depth}   \r\n')
 
         # torch.cuda.synchronize()
         gpu_time = time.time() - end
