@@ -15,10 +15,10 @@ def validate(val_loader, model, epoch, output_directory=""):
     average_meter = AverageMeter()
     model.eval()  # switch to evaluate mode
     end = time.time()
-
-    eval_file = output_directory + '/evaluation.txt'
+    
+    eval_file = output_directory + '/evaluation.csv'
     f = open(eval_file, "w+")
-    f.write("Max_Error  Depth   \r\n")
+    f.write("Max_Error,Depth,RMSE,GPU_TIME,Number_Of_Frame\r\n")
     for i, (input, target) in enumerate(val_loader):
         input, target = input.cuda(), target.cuda()
         # torch.cuda.synchronize()
@@ -47,13 +47,14 @@ def validate(val_loader, model, epoch, output_directory=""):
         result.evaluate(pred.data, target.data)
         average_meter.update(result, gpu_time, data_time, input.size(0))
         end = time.time()
+        
+        f.write(f'{max_err},{max_err_depth},{result.rmse:.2f},{gpu_time},{i+1}\r\n')
 
         # save 8 images for visualization
-        skip = 50
+        skip = 10
         output_directory = os.path.abspath(os.path.dirname(__file__))
 
         if i == 0:
-            print(f'{input.shape} {target.shape} {pred.shape}')
             img_merge = utils.merge_into_row_with_gt(input, target, pred, (target-pred).abs())
         elif (i < 8 * skip) and (i % skip == 0):
             row = utils.merge_into_row_with_gt(input, target, pred, (target-pred).abs())
@@ -121,7 +122,8 @@ def main():
     else:
         model = checkpoint
         args.start_epoch = 0
-    output_directory = os.path.dirname(__file__)
+    output_directory = os.path.dirname(os.path.abspath(__file__))
+    print(output_directory)
     validate(val_loader, model, args.start_epoch, output_directory)
     return
 
