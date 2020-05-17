@@ -1,6 +1,8 @@
 # DenseDepth Implemention in Pytorch
 This repo contains Pytorch implementation of depth estimation deep learning network based on the published paper: [High Quality Monocular Depth Estimation via Transfer Learning](https://arxiv.org/pdf/1812.11941.pdf)
 
+This repository was part of the "Autonomous Robotics Lab" in Tel Aviv University
+
 ## Installation
 
 These instructions will get you a copy of the project up and running on your local machine for development and testing purposes.
@@ -21,7 +23,7 @@ Use the following commands to create a new working virtual environment with all 
 **GPU based enviroment**:
 ```
 git clone https://github.com/tau-adl/DenseDepth
-cd DenseDepth_Pytorch
+cd DenseDepth
 conda env create -f DenseDepth_env.yml
 conda activate DenseDepth
 pip install -r pip_requirements.txt
@@ -32,11 +34,7 @@ pip install -r pip_requirements.txt
 ### NYU database
 Download the preprocessed NYU Depth V2 dataset in HDF5 format and place it under a data folder outside the repo directory. The NYU dataset requires 32G of storage space.
 ```
-mkdir data; cd data
-
-wget http://datasets.lids.mit.edu/fastdepth/data/nyudepthv2.tar.gz
-
-tar -xvf nyudepthv2.tar.gz && rm -f nyudepthv2.tar.gz
+./DataCollect.sh
 ```
 
 ## Training the model
@@ -50,11 +48,9 @@ python3 Train.py --epochs 10 --lr 0.01
 
 Execute testing by running:  
 ```
-python3 Evaluate.py --path TrainedModel/EntireModel/model_batch_10_epochs_1.pt 
+python3 Evaluate.py --path TrainedModel/EntireModel/model_batch_10_epochs_1.pt
 ```
 
 ## Authors
 * **David Sriker** - *David.Sriker@gmail.com*
 * **Sunny Yehuda** - *sunnyyehuda@gmail.com*
-
-
