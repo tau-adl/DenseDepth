@@ -1,7 +1,5 @@
 #!/usr/bin/env bash
 
-#!/usr/bin/env bash
-
 # script to download the data
 unzip_from_link() {
   local link=$1
