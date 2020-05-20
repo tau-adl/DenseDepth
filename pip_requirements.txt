@@ -9,6 +9,7 @@ cycler==0.10.0
 decorator==4.4.0
 filelock==3.0.12
 glob2==0.7
+h5py==2.10.0
 idna==2.8
 imageio==2.8.0
 ipython==7.8.0
