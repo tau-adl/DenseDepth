@@ -24,8 +24,6 @@ Use the following commands to create a new working virtual environment with all 
 ```
 git clone https://github.com/tau-adl/DenseDepth
 cd DenseDepth
-conda env create -f DenseDepth_env.yml
-conda activate DenseDepth
 pip install -r pip_requirements.txt
 ```
 
