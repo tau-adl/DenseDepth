@@ -143,7 +143,7 @@ class NYU(CustomDataLoader):
 
         # perform 1st step of data augmentation
         transform = T.Compose([
-            T.Resize(250.0 / IMAGE_HEIGHT),  # this is for computational efficiency, since rotation can be slow
+            T.Resize(int(250.0 / IMAGE_HEIGHT)),  # this is for computational efficiency, since rotation can be slow
             T.Rotate(angle),
             T.Resize(s),
             T.CenterCrop((228, 304)),
