@@ -142,7 +142,7 @@ class NYU(CustomDataLoader):
         do_flip = np.random.uniform(0.0, 1.0) < 0.5  # random horizontal flip
 
         # perform 1st step of data augmentation
-        first_resize = int(250.0 / IMAGE_HEIGHT) * (IMAGE_HEIGHT, IMAGE_WIDTH)
+        first_resize = tuple(list(map(int, (250.0 / IMAGE_HEIGHT) * (IMAGE_HEIGHT, IMAGE_WIDTH))))
         transform = T.Compose([
             T.Resize(first_resize),  # this is for computational efficiency, since rotation can be slow
             T.Rotate(angle),
@@ -159,7 +159,7 @@ class NYU(CustomDataLoader):
         return rgb_np, depth_np
 
     def validationTransform(self, rgb, depth):
-        first_resize = int(250.0 / IMAGE_HEIGHT) * (IMAGE_HEIGHT, IMAGE_WIDTH)
+        first_resize = tuple(list(map(int, (250.0 / IMAGE_HEIGHT) * (IMAGE_HEIGHT, IMAGE_WIDTH))))
         depth_np = depth
         transform = T.Compose([
             T.Resize(first_resize),
