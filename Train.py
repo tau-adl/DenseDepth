@@ -8,8 +8,8 @@ from tensorboardX import SummaryWriter
 
 from Data import *
 from Model import FullModel
-from Utilities import AverageMeter, DepthNorm, colorize, logEpoch
-
+from Utilities import Result, AverageMeter, DepthNorm, colorize, logEpoch
+import Loss as criteria
 
 def main():
     modality_names = CustomDataLoader.modality_names
@@ -63,6 +63,7 @@ def main():
             # Prepare sample and target
             image, depth = image.cuda(), depth.cuda()
             torch.cuda.synchronize()
+            data_time = time.time() - end
             # Normalize depth
             depth_n = DepthNorm(depth)
             # Predict
@@ -79,34 +80,35 @@ def main():
             loss.backward()
             optimizer.step()
             torch.cuda.synchronize()
+            gpu_time = time.time() - end
             result = Result()
             result.evaluate(output.data, depth_n.data)
             # Measure elapsed time
-            batch_time.update(time.time() - end)
+            batch_time.update(result, gpu_time, data_time, image.size(0))
+            # end = time.time()
+            eta = str(time.time() - end)
             end = time.time()
-            eta = str(datetime.timedelta(seconds=int(batch_time.val * (N - i))))
-
             # Log progress
             niter = epoch * N + i
 
             if i % 5 == 0:
                 # Print to console
                 print('Epoch: [{0}][{1}/{2}]\t'
-                      'Time {batch_time.val:.3f} ({batch_time.sum:.3f})\t'
+                      'Time {batch_time.sum_data_time:.3f} ({batch_time.sum_gpu_time:.3f})\t'
                       'ETA {eta}\t'
                       'Loss {loss} RMSE {rmse}'
                       .format(epoch, i, N, batch_time=batch_time, loss=loss, rmse=result.rmse, eta=eta))
 
                 # Log to tensorboard
-                writer.add_scalar('Train/Loss', losses.val, niter)
+                writer.add_scalar('Train/Loss', loss, niter)
 
             if i % 300 == 0:
                 LogProgress(model, writer, test_loader, niter)
 
         # Record epoch's intermediate results
-        logEpoch(epoch, losses.val, "TrainOutput.txt")
+        logEpoch(epoch, loss, "TrainOutput.txt")
         LogProgress(model, writer, test_loader, niter)
-        writer.add_scalar('Train/Loss.avg', losses.avg, epoch)
+        writer.add_scalar('Train/Loss.avg', loss, epoch)
     # save the final model
     base_dir = "TrainedModel"
     entire_model_dir = os.path.join(base_dir, "EntireModel")
@@ -120,7 +122,7 @@ def main():
     torch_model_name = "model_batch_{:}_epochs_{:}.pt".format(args.batch_size, args.epochs)
     torch.save(model, os.path.join(entire_model_dir, torch_model_name))
     torch.save(model.state_dict(), os.path.join(model_param_dir, torch_model_name))
-    print('done :-)')
+    print('done')
 
 
 def LogProgress(model, writer, test_loader, epoch):

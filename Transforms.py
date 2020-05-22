@@ -326,6 +326,7 @@ class Resize(object):
         assert isinstance(size, int) or isinstance(size, float) or \
                (isinstance(size, collections.Iterable) and len(size) == 2)
         self.size = size
+        # print(size, type(size))
         self.interpolation = interpolation
 
     def __call__(self, img):
